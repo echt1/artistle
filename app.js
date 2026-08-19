@@ -41,41 +41,98 @@ function showStep(name) {
 // STEP 1: ARTIST-SUCHE
 // ============================================================
 
-el("searchForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const query = el("artistInput").value.trim();
-  if (!query) return;
+const artistInput = el("artistInput");
+const artistDropdown = el("artistDropdown");
+const ARTIST_SEARCH_MIN_CHARS = 2;
+const ARTIST_SEARCH_DEBOUNCE_MS = 350;
 
-  el("searchStatus").textContent = "Suche läuft...";
-  el("artistResults").innerHTML = "";
+let artistSearchDebounceTimer = null;
+let artistSearchRequestId = 0; // verhindert dass ein alter, langsamer Request neuere Ergebnisse ueberschreibt
+
+artistInput.addEventListener("input", () => {
+  const query = artistInput.value.trim();
+  clearTimeout(artistSearchDebounceTimer);
+
+  if (query.length < ARTIST_SEARCH_MIN_CHARS) {
+    hideArtistDropdown();
+    return;
+  }
+
+  showArtistDropdownLoading();
+  artistSearchDebounceTimer = setTimeout(() => runArtistSearch(query), ARTIST_SEARCH_DEBOUNCE_MS);
+});
+
+// Enter im Feld -> sofort suchen, ohne auf das Debounce zu warten
+el("searchForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  clearTimeout(artistSearchDebounceTimer);
+  const query = artistInput.value.trim();
+  if (query.length < ARTIST_SEARCH_MIN_CHARS) return;
+  runArtistSearch(query);
+});
+
+async function runArtistSearch(query) {
+  const requestId = ++artistSearchRequestId;
+  el("searchStatus").textContent = "";
 
   try {
     const artists = await searchArtists(query);
-    el("searchStatus").textContent = artists.length
-      ? ""
-      : "Keine Artists gefunden. Anders schreiben?";
-    renderArtistResults(artists);
+    if (requestId !== artistSearchRequestId) return; // Antwort ist veraltet, verwerfen
+    renderArtistDropdown(artists);
   } catch (err) {
+    if (requestId !== artistSearchRequestId) return;
     console.error(err);
-    el("searchStatus").textContent = "Fehler bei der Suche. Proxy down? Nochmal versuchen.";
+    showArtistDropdownError();
+  }
+}
+
+function showArtistDropdownLoading() {
+  artistDropdown.innerHTML = `<div class="artist-suggestion-item loading">Suche läuft...</div>`;
+  artistDropdown.classList.remove("hidden");
+}
+
+function showArtistDropdownError() {
+  artistDropdown.innerHTML = `<div class="artist-suggestion-item empty">Fehler bei der Suche. Nochmal probieren?</div>`;
+  artistDropdown.classList.remove("hidden");
+}
+
+function renderArtistDropdown(artists) {
+  if (!artists.length) {
+    artistDropdown.innerHTML = `<div class="artist-suggestion-item empty">Keine Artists gefunden</div>`;
+    artistDropdown.classList.remove("hidden");
+    return;
+  }
+
+  artistDropdown.innerHTML = "";
+  artists.forEach(artist => {
+    const item = document.createElement("div");
+    item.className = "artist-suggestion-item";
+    item.innerHTML = `
+      <img src="${artist.picture_medium}" alt="${artist.name}" loading="lazy" />
+      <div class="info">
+        <span class="name">${artist.name}</span>
+        <span class="fans">${formatFans(artist.nb_fan)} Fans</span>
+      </div>
+    `;
+    item.addEventListener("click", () => {
+      hideArtistDropdown();
+      selectArtist(artist);
+    });
+    artistDropdown.appendChild(item);
+  });
+  artistDropdown.classList.remove("hidden");
+}
+
+function hideArtistDropdown() {
+  artistDropdown.classList.add("hidden");
+  artistDropdown.innerHTML = "";
+}
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#searchForm .autocomplete-wrap")) {
+    hideArtistDropdown();
   }
 });
-
-function renderArtistResults(artists) {
-  const container = el("artistResults");
-  container.innerHTML = "";
-  artists.forEach(artist => {
-    const card = document.createElement("div");
-    card.className = "artist-card";
-    card.innerHTML = `
-      <img src="${artist.picture_medium}" alt="${artist.name}" loading="lazy" />
-      <div class="name">${artist.name}</div>
-      <div class="fans">${formatFans(artist.nb_fan)} Fans</div>
-    `;
-    card.addEventListener("click", () => selectArtist(artist));
-    container.appendChild(card);
-  });
-}
 
 function formatFans(n) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -106,8 +163,8 @@ function selectArtist(artist) {
 
 el("restartBtn").addEventListener("click", () => {
   state.artist = null;
-  el("artistInput").value = "";
-  el("artistResults").innerHTML = "";
+  artistInput.value = "";
+  hideArtistDropdown();
   el("searchStatus").textContent = "";
   el("restartBtn").classList.add("hidden");
   showStep("search");

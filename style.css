@@ -109,24 +109,32 @@ button{ font-family:'Inter', sans-serif; cursor:pointer; border:none; }
 
 .status{ color: var(--text-dim); margin-top: 16px; min-height: 1.2em; }
 
-/* Artist results */
-.artist-grid{
-  display:grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr));
-  gap:12px; margin-top:22px;
-}
-.artist-card{
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-  text-align:center;
+/* Autocomplete-Wrap braucht volle Breite fuer das Input darin */
+.autocomplete-wrap input[type="text"]{ width:100%; }
+
+/* Artist Live-Dropdown */
+.artist-dropdown{ max-height: 320px; }
+.artist-suggestion-item{
+  display:flex; align-items:center; gap:12px;
+  padding: 10px 12px;
   cursor:pointer;
-  transition: border-color .15s, transform .1s;
+  border-bottom: 1px solid var(--border);
 }
-.artist-card:hover{ border-color: var(--accent); transform: translateY(-2px); }
-.artist-card img{ width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; margin-bottom:8px; }
-.artist-card .name{ font-size:.85rem; font-weight:600; }
-.artist-card .fans{ font-size:.72rem; color:var(--text-dim); }
+.artist-suggestion-item:last-child{ border-bottom:none; }
+.artist-suggestion-item:hover{ background: rgba(94,234,212,0.08); }
+.artist-suggestion-item img{
+  width:38px; height:38px; border-radius:8px; object-fit:cover; flex-shrink:0;
+}
+.artist-suggestion-item .info{ display:flex; flex-direction:column; min-width:0; }
+.artist-suggestion-item .name{
+  font-size:.92rem; font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.artist-suggestion-item .fans{ font-size:.75rem; color:var(--text-dim); }
+.artist-suggestion-item.loading, .artist-suggestion-item.empty{
+  color: var(--text-dim); cursor:default; justify-content:center;
+}
+.artist-suggestion-item.loading:hover, .artist-suggestion-item.empty:hover{ background:transparent; }
 
 /* Chosen artist card */
 .chosen-artist{

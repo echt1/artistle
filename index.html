@@ -26,11 +26,13 @@
     <p class="sub">Der komplette Songpool kommt nur von diesem Artist.</p>
 
     <form id="searchForm" class="search-row" autocomplete="off">
-      <input id="artistInput" type="text" placeholder="z.B. bbno$, Ed Sheeran, ..." required />
+      <div class="autocomplete-wrap">
+        <input id="artistInput" type="text" placeholder="z.B. bbno$, Ed Sheeran, ..." required />
+        <div id="artistDropdown" class="suggestions artist-dropdown hidden"></div>
+      </div>
       <button type="submit">Suchen</button>
     </form>
 
-    <div id="artistResults" class="artist-grid"></div>
     <p id="searchStatus" class="status"></p>
   </section>
 

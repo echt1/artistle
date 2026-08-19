@@ -4,10 +4,16 @@
 
 const CONFIG = {
   // Deezers JSON-API sendet keine CORS-Header, deshalb Requests
-  // ueber einen oeffentlichen Proxy leiten. Falls dieser Proxy
-  // mal ausfaellt, reicht es diese eine Zeile zu ersetzen
-  // (z.B. durch einen selbst gehosteten Cloudflare Worker).
-  CORS_PROXY_PREFIX: "https://api.allorigins.win/raw?url=",
+  // ueber oeffentliche Proxies leiten. Mehrere Proxies als Fallback,
+  // weil die kostenlosen Dienste alle mal haengen/down sind - wenn
+  // der erste nicht innerhalb von REQUEST_TIMEOUT_MS antwortet,
+  // wird automatisch der naechste probiert.
+  CORS_PROXIES: [
+    "https://api.codetabs.com/v1/proxy/?quest=",
+    "https://proxy.corsfix.com/?",
+    "https://api.allorigins.win/raw?url=",
+  ],
+  REQUEST_TIMEOUT_MS: 6000,
 
   DEEZER_BASE: "https://api.deezer.com",
 

@@ -3,14 +3,49 @@
 // Alle Requests laufen ueber den CORS-Proxy aus config.js
 // ============================================================
 
+/** Fetch mit Timeout, damit ein haengender Proxy die App nicht ewig blockiert. */
+async function fetchWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Probiert die konfigurierten CORS-Proxies der Reihe nach durch.
+ * Sobald einer antwortet (und JSON liefert), wird das Ergebnis genutzt.
+ * Schlaegt einer fehl oder haengt (Timeout), kommt automatisch der naechste dran.
+ */
 async function deezerFetch(path) {
   const targetUrl = CONFIG.DEEZER_BASE + path;
-  const proxied = CONFIG.CORS_PROXY_PREFIX + encodeURIComponent(targetUrl);
-  const res = await fetch(proxied);
-  if (!res.ok) {
-    throw new Error(`Deezer-Request fehlgeschlagen (${res.status}) fuer ${path}`);
+  const errors = [];
+
+  for (const proxyPrefix of CONFIG.CORS_PROXIES) {
+    const proxied = proxyPrefix + encodeURIComponent(targetUrl);
+    try {
+      const res = await fetchWithTimeout(proxied, CONFIG.REQUEST_TIMEOUT_MS);
+      if (!res.ok) {
+        errors.push(`${proxyPrefix} -> HTTP ${res.status}`);
+        continue;
+      }
+      const data = await res.json();
+      // Manche Proxies liefern bei Deezer-Fehlern trotzdem HTTP 200 mit einem
+      // { error: {...} } Body - das ebenfalls als Fehlschlag werten.
+      if (data && data.error) {
+        errors.push(`${proxyPrefix} -> Deezer-Error: ${JSON.stringify(data.error)}`);
+        continue;
+      }
+      return data;
+    } catch (err) {
+      errors.push(`${proxyPrefix} -> ${err.name === "AbortError" ? "Timeout" : err.message}`);
+      continue; // naechsten Proxy probieren
+    }
   }
-  return res.json();
+
+  throw new Error(`Alle CORS-Proxies fehlgeschlagen fuer ${path}: ${errors.join(" | ")}`);
 }
 
 /** Sucht Artists per Namen. Gibt die Top-Treffer zurueck. */
