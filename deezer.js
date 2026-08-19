@@ -3,49 +3,53 @@
 // Alle Requests laufen ueber den CORS-Proxy aus config.js
 // ============================================================
 
-/** Fetch mit Timeout, damit ein haengender Proxy die App nicht ewig blockiert. */
-async function fetchWithTimeout(url, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
+let jsonpCounter = 0;
 
 /**
- * Probiert die konfigurierten CORS-Proxies der Reihe nach durch.
- * Sobald einer antwortet (und JSON liefert), wird das Ergebnis genutzt.
- * Schlaegt einer fehl oder haengt (Timeout), kommt automatisch der naechste dran.
+ * Deezer via JSONP abfragen (offiziell von Deezer unterstuetzt, siehe
+ * Deezer Developer FAQ). Erzeugt ein <script>-Tag, das Deezer laedt;
+ * Deezer ruft dann selbst unsere Callback-Funktion mit den Daten auf.
+ * Kein CORS-Proxy noetig, kein Drittanbieter im Spiel.
  */
-async function deezerFetch(path) {
-  const targetUrl = CONFIG.DEEZER_BASE + path;
-  const errors = [];
+function deezerFetch(path) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `__deezerJsonp_${Date.now()}_${jsonpCounter++}`;
+    const separator = path.includes("?") ? "&" : "?";
+    const url = `${CONFIG.DEEZER_BASE}${path}${separator}output=jsonp&callback=${callbackName}`;
 
-  for (const proxyPrefix of CONFIG.CORS_PROXIES) {
-    const proxied = proxyPrefix + encodeURIComponent(targetUrl);
-    try {
-      const res = await fetchWithTimeout(proxied, CONFIG.REQUEST_TIMEOUT_MS);
-      if (!res.ok) {
-        errors.push(`${proxyPrefix} -> HTTP ${res.status}`);
-        continue;
-      }
-      const data = await res.json();
-      // Manche Proxies liefern bei Deezer-Fehlern trotzdem HTTP 200 mit einem
-      // { error: {...} } Body - das ebenfalls als Fehlschlag werten.
-      if (data && data.error) {
-        errors.push(`${proxyPrefix} -> Deezer-Error: ${JSON.stringify(data.error)}`);
-        continue;
-      }
-      return data;
-    } catch (err) {
-      errors.push(`${proxyPrefix} -> ${err.name === "AbortError" ? "Timeout" : err.message}`);
-      continue; // naechsten Proxy probieren
+    const script = document.createElement("script");
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      finish(() => reject(new Error(`Deezer-Timeout fuer ${path}`)));
+    }, CONFIG.REQUEST_TIMEOUT_MS);
+
+    function finish(action) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      delete window[callbackName];
+      script.remove();
+      action();
     }
-  }
 
-  throw new Error(`Alle CORS-Proxies fehlgeschlagen fuer ${path}: ${errors.join(" | ")}`);
+    window[callbackName] = (data) => {
+      finish(() => {
+        if (data && data.error) {
+          reject(new Error(`Deezer-API-Error: ${data.error.message || JSON.stringify(data.error)}`));
+        } else {
+          resolve(data);
+        }
+      });
+    };
+
+    script.onerror = () => {
+      finish(() => reject(new Error(`Konnte Deezer nicht erreichen (${path})`)));
+    };
+
+    script.src = url;
+    document.head.appendChild(script);
+  });
 }
 
 /** Sucht Artists per Namen. Gibt die Top-Treffer zurueck. */

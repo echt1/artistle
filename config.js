@@ -3,17 +3,11 @@
 // ============================================================
 
 const CONFIG = {
-  // Deezers JSON-API sendet keine CORS-Header, deshalb Requests
-  // ueber oeffentliche Proxies leiten. Mehrere Proxies als Fallback,
-  // weil die kostenlosen Dienste alle mal haengen/down sind - wenn
-  // der erste nicht innerhalb von REQUEST_TIMEOUT_MS antwortet,
-  // wird automatisch der naechste probiert.
-  CORS_PROXIES: [
-    "https://api.codetabs.com/v1/proxy/?quest=",
-    "https://proxy.corsfix.com/?",
-    "https://api.allorigins.win/raw?url=",
-  ],
-  REQUEST_TIMEOUT_MS: 6000,
+  // Deezers JSON-API sendet keine CORS-Header - ABER Deezer bietet dafuer
+  // offiziell JSONP an (output=jsonp&callback=...). Das laeuft komplett
+  // ohne Drittanbieter-Proxy direkt im Browser, deshalb kein CORS-Proxy
+  // mehr noetig (die waren notorisch unzuverlaessig/haengend).
+  REQUEST_TIMEOUT_MS: 8000,
 
   DEEZER_BASE: "https://api.deezer.com",
 
