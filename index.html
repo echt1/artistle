@@ -36,57 +36,42 @@
     <p id="searchStatus" class="status"></p>
   </section>
 
-  <!-- STEP 2: Schwierigkeit -->
-  <section id="step-difficulty" class="step">
-    <div class="chosen-artist" id="chosenArtistCard"></div>
-    <h2>Schwierigkeit wählen</h2>
-    <div class="difficulty-grid">
-      <button class="diff-btn" data-diff="easy">
-        <strong>Leicht</strong>
-        <span>Top-Hits des Artists</span>
-      </button>
-      <button class="diff-btn" data-diff="medium">
-        <strong>Mittel</strong>
-        <span>Bekannte, aber nicht die größten Hits</span>
-      </button>
-      <button class="diff-btn" data-diff="hard">
-        <strong>Schwer</strong>
-        <span>Deep Cuts aus dem gesamten Katalog</span>
-      </button>
-    </div>
-    <p id="diffStatus" class="status"></p>
-  </section>
-
-  <!-- STEP 3: Game -->
+  <!-- STEP 2: Game -->
   <section id="step-game" class="step">
     <div class="game-head">
       <div class="chosen-artist" id="gameArtistCard"></div>
-      <div class="attempts" id="attemptsDisplay"></div>
+      <div class="attempt-counter" id="attemptCounter"></div>
     </div>
 
     <div class="player-card">
-      <div class="waveform" id="waveform">
-        <div class="progress-bar" id="progressBar"></div>
+      <div class="timeline" id="timeline">
+        <div class="timeline-track">
+          <div class="timeline-fill" id="timelineFill"></div>
+          <div class="timeline-playhead" id="timelinePlayhead"></div>
+        </div>
+        <div class="timeline-ticks" id="timelineTicks"></div>
       </div>
 
       <div class="player-controls">
-        <button id="playBtn" class="play-btn" aria-label="Snippet abspielen">
+        <button id="playBtn" class="play-btn" aria-label="Snippet abspielen" disabled>
           <svg id="playIcon" viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
         </button>
         <div class="snippet-info">
+          <span class="snippet-info-label">Ausschnitt</span>
           <span id="currentSnippetLength">0.1s</span>
-          <div class="snippet-dots" id="snippetDots"></div>
         </div>
       </div>
+
+      <p id="gameStatus" class="status"></p>
     </div>
 
     <form id="guessForm" class="guess-row" autocomplete="off">
       <div class="autocomplete-wrap">
-        <input id="guessInput" type="text" placeholder="Songtitel eingeben (min. 4 Zeichen für Vorschläge)" />
+        <input id="guessInput" type="text" placeholder="Songtitel eingeben (min. 4 Zeichen für Vorschläge)" disabled />
         <div id="suggestions" class="suggestions hidden"></div>
       </div>
-      <button type="submit">Raten</button>
-      <button type="button" id="skipBtn" class="ghost-btn">Skip</button>
+      <button type="submit" disabled>Raten</button>
+      <button type="button" id="skipBtn" class="ghost-btn" disabled>Skip</button>
     </form>
 
     <ul id="guessHistory" class="guess-history"></ul>
@@ -98,10 +83,15 @@
 
 </main>
 
-<audio id="audioPlayer" preload="none"></audio>
+<!-- Unsichtbarer YouTube-Player: liefert den echten Vollton, wir steuern
+     nur Start/Stop. Bewusst nicht display:none, sonst pausiert YouTube
+     die Wiedergabe in manchen Browsern. -->
+<div id="ytPlayer" class="yt-player-hidden"></div>
+<script src="https://www.youtube.com/iframe_api"></script>
 
 <script src="config.js"></script>
 <script src="deezer.js"></script>
+<script src="youtube.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -82,8 +82,10 @@ input[type="text"]{
   transition: border-color .15s;
 }
 input[type="text"]:focus{ border-color: var(--accent); }
+input[type="text"]:disabled{ opacity:.5; cursor:not-allowed; }
 
 button{ font-family:'Inter', sans-serif; cursor:pointer; border:none; }
+button:disabled{ opacity:.5; cursor:not-allowed; }
 
 .search-row button, .guess-row button[type="submit"], .primary-btn{
   background: var(--accent);
@@ -149,32 +151,13 @@ button{ font-family:'Inter', sans-serif; cursor:pointer; border:none; }
 .chosen-artist .name{ font-weight:600; }
 .chosen-artist .fans{ font-size:.78rem; color:var(--text-dim); }
 
-/* Difficulty */
-.difficulty-grid{ display:grid; gap:12px; }
-.diff-btn{
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
-  text-align:left;
-  color: var(--text);
-  display:flex; flex-direction:column; gap:4px;
-  transition: border-color .15s, transform .1s;
-}
-.diff-btn:hover{ border-color: var(--accent); transform: translateY(-1px); }
-.diff-btn strong{ font-family:'Space Grotesk', sans-serif; font-size:1.05rem; }
-.diff-btn span{ color: var(--text-dim); font-size: .85rem; }
-.diff-btn:disabled{ opacity:.4; cursor:not-allowed; }
-
 /* Game */
-.game-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
-.attempts{ display:flex; gap:6px; margin-bottom:20px; }
-.attempt-dot{
-  width:10px; height:10px; border-radius:50%;
-  background: var(--border);
+.game-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+.attempt-counter{
+  font-size:.85rem; color: var(--text-dim);
+  background: var(--bg-elevated); border:1px solid var(--border);
+  padding: 6px 12px; border-radius: 999px;
 }
-.attempt-dot.used{ background: var(--bad); }
-.attempt-dot.current{ background: var(--accent); }
 
 .player-card{
   background: var(--bg-elevated);
@@ -184,19 +167,48 @@ button{ font-family:'Inter', sans-serif; cursor:pointer; border:none; }
   margin-bottom: 20px;
 }
 
-.waveform{
-  height:64px;
-  border-radius:8px;
-  background: repeating-linear-gradient(90deg, var(--border) 0 2px, transparent 2px 6px);
+/* Segmentierte Timeline: Ticks bleiben dauerhaft sichtbar, statt dass
+   der Balken bei jedem Versuch komplett neu von 0-100% laeuft. */
+.timeline{ margin-bottom: 28px; }
+.timeline-track{
   position:relative;
-  overflow:hidden;
-  margin-bottom:20px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  margin-bottom: 22px;
 }
-.progress-bar{
-  position:absolute; left:0; top:0; bottom:0; width:0%;
-  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
-  transition: width linear;
+.timeline-fill{
+  position:absolute; left:0; top:0; bottom:0;
+  width:0%;
+  border-radius:999px;
+  background: var(--accent-dim);
+  transition: width .2s ease;
 }
+.timeline-playhead{
+  position:absolute; top:-4px; bottom:-4px;
+  left:0%;
+  width:3px;
+  border-radius:2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+.timeline-ticks{ position:relative; height: 34px; }
+.tick{
+  position:absolute; top:0;
+  transform: translateX(-50%);
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+.tick-mark{
+  width:12px; height:12px; border-radius:50%;
+  background: var(--border);
+  border: 2px solid var(--bg-elevated);
+  margin-top:-14px;
+}
+.tick-label{ font-size:.72rem; color: var(--text-dim); white-space:nowrap; }
+.tick.past .tick-mark{ background: var(--bad); }
+.tick.current .tick-mark{ background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.tick.current .tick-label{ color: var(--accent); font-weight:600; }
+.tick.future .tick-mark{ background: var(--border); }
 
 .player-controls{ display:flex; align-items:center; gap:18px; }
 .play-btn{
@@ -208,12 +220,18 @@ button{ font-family:'Inter', sans-serif; cursor:pointer; border:none; }
 }
 .play-btn:hover{ transform: scale(1.05); }
 .play-btn.playing{ background: var(--text-dim); }
+.play-btn:disabled{ opacity:.4; cursor:not-allowed; transform:none; }
 
-.snippet-info{ display:flex; flex-direction:column; gap:6px; }
+.snippet-info{ display:flex; flex-direction:column; gap:2px; }
+.snippet-info-label{ font-size:.75rem; color: var(--text-dim); }
 #currentSnippetLength{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:1.1rem; }
-.snippet-dots{ display:flex; gap:5px; }
-.snippet-dots .sdot{ width:6px; height:6px; border-radius:50%; background: var(--border); }
-.snippet-dots .sdot.active{ background: var(--accent); }
+
+/* Versteckter YouTube-Player: liefert nur Ton, kein sichtbares Video
+   (waere sonst ein Cheat, da Thumbnail/Kanalname den Song verraten). */
+.yt-player-hidden{
+  position:absolute; width:1px; height:1px;
+  overflow:hidden; opacity:0; pointer-events:none;
+}
 
 /* Guess form */
 .guess-row{ display:flex; gap:10px; margin-bottom:16px; }

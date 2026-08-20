@@ -3,6 +3,24 @@
 Heardle-Klon, aber der Songpool ist auf einen selbst gewählten Künstler beschränkt.
 Läuft komplett clientseitig (HTML/CSS/Vanilla-JS), keine Datenbank, kein Backend.
 
+## YouTube API-Key holen (einmalig nötig)
+
+Die Songs werden als echte Volltracks über YouTube abgespielt (nicht über
+30s-Preview-Schnipsel — die starten nämlich nicht garantiert am Songanfang).
+Dafür brauchst du einen **kostenlosen** Google-API-Key:
+
+1. Gehe zu [console.cloud.google.com](https://console.cloud.google.com/) und logg dich mit einem Google-Account ein.
+2. Oben ein neues Projekt erstellen (z.B. "artistle").
+3. Im Menü zu **APIs & Dienste → Bibliothek**, nach "YouTube Data API v3" suchen, anklicken, **Aktivieren**.
+4. Zu **APIs & Dienste → Anmeldedaten → Anmeldedaten erstellen → API-Schlüssel**. Der Key wird sofort angezeigt.
+5. (Empfohlen) Auf den Key klicken → unter "Anwendungseinschränkungen" **Websites (HTTP-Referrer)** wählen und deine
+   GitHub-Pages-URL eintragen (z.B. `https://dein-username.github.io/*`), damit niemand sonst deinen Key benutzen kann.
+6. Den Key in `config.js` bei `YOUTUBE_API_KEY` eintragen.
+
+Kein Kreditkarte nötig. Kostenlos: 10.000 Quota-Einheiten/Tag, eine Songsuche
+kostet 100 Einheiten → ca. 100 Songrunden pro Tag. Für privaten Gebrauch mehr
+als genug.
+
 ## Lokal testen
 
 Einfach `index.html` per Live-Server öffnen (nicht per Doppelklick als `file://`,
@@ -18,32 +36,28 @@ Dann im Browser `http://localhost:8080` (bzw. den von `serve` ausgegebenen Port)
 
 ## Deploy auf GitHub Pages
 
-1. Neues Repo erstellen, diese 5 Dateien reinpushen (`index.html`, `style.css`,
-   `config.js`, `deezer.js`, `app.js`, `README.md`).
+1. Neues Repo erstellen, alle Dateien reinpushen (`index.html`, `style.css`,
+   `config.js`, `deezer.js`, `youtube.js`, `app.js`, `README.md`).
 2. GitHub → Repo → Settings → Pages → Branch auf `main` (Ordner `/root`) stellen.
 3. Nach ca. 1 Minute ist es live unter `https://<dein-username>.github.io/<repo-name>/`.
+4. Nicht vergessen: den API-Key-Referrer-Schutz (Schritt 5 oben) auf genau diese URL setzen.
 
-Kein API-Key, kein Firebase, kein Build-Step nötig.
+## Wie es technisch funktioniert
 
-## Wie der Songpool zustande kommt
+- **Artist-Suche & Songtitel-Liste**: Deezer API, über offizielles JSONP
+  (`output=jsonp`) direkt im Browser, kein Proxy nötig.
+- **Songwiedergabe**: Für die Runde wird ein zufälliger Songtitel aus dem
+  Deezer-Pool genommen und auf YouTube gesucht ("Artist Songtitel official
+  audio"). Der YouTube IFrame Player lädt das Video unsichtbar (nur Ton,
+  kein Bild — sonst wäre der Songname/Cover sofort sichtbar) und wir steuern
+  Start/Stop selbst per JS, immer ab Sekunde 0.
+- Ist ein Video nicht einbettbar (Label-Sperre), wird automatisch der nächste
+  Suchtreffer bzw. bei Bedarf ein komplett anderer Song aus dem Pool probiert.
 
-- **Leicht**: Rang 1–10 der Top-Tracks des Artists (Deezer liefert `/artist/{id}/top`
-  bereits nach Popularität sortiert).
-- **Mittel**: Rang 11–40.
-- **Schwer**: alle Tracks aus allen Alben/EPs (bis zu 25 Releases), abzüglich der
-  Top-40-Songs → das sind die tatsächlichen Deep Cuts. Kann ein paar Sekunden
-  laden, weil dafür pro Album ein eigener Request nötig ist.
+## Bekannte Einschränkungen
 
-## Bekannte Einschränkungen / mögliche nächste Schritte
-
-- **CORS-Proxy**: läuft über den kostenlosen `allorigins.win`-Proxy (config.js,
-  `CORS_PROXY_PREFIX`). Kein Setup nötig, aber theoretisch weniger zuverlässig
-  als ein eigener Proxy. Falls er mal streikt, einfach melden — Umstieg auf
-  z.B. einen eigenen Cloudflare Worker ist eine Zeile Code.
-- Manche Songs eines Artists haben keine Deezer-Preview (Lizenzlücken) —
-  die werden automatisch aus dem Pool gefiltert.
-- Deep-Cut-Dedupe läuft nur über den Songtitel, nicht über die exakte
-  Aufnahme — bei Artists mit vielen Re-Releases/Remixes können in seltenen
-  Fällen leicht unterschiedliche Versionen als "gleicher" Titel zählen.
-- Kein Spielstand-Speicher (Absicht laut Anforderung) — bei Reload ist die
-  Runde vorbei.
+- YouTube-Suchtreffer sind nicht 100% garantiert der exakt richtige Track
+  (z.B. Cover-Versionen, Lyric-Videos). Der Suchbegriff enthält bewusst
+  "official audio" um das zu minimieren, ist aber keine Garantie.
+- 100 Songrunden/Tag Limit durch YouTube-Quota — für privates Spielen kein Thema.
+- Kein Spielstand-Speicher (Absicht) — bei Reload ist die Runde vorbei.

@@ -2,33 +2,24 @@
 // APP STATE
 // ============================================================
 
+const MAX_SNIPPET = CONFIG.SNIPPET_LENGTHS[CONFIG.SNIPPET_LENGTHS.length - 1];
+
 const state = {
-  artist: null,       // { id, name, picture_medium, nb_fan }
-  difficulty: null,    // "easy" | "medium" | "hard"
-  pool: [],             // Track-Pool fuer die aktuelle Schwierigkeit (fuer Autocomplete)
-  targetTrack: null,   // Der gesuchte Track dieser Runde
-  attemptIndex: 0,      // Index in CONFIG.SNIPPET_LENGTHS
+  artist: null,        // { id, name, picture_medium, nb_fan }
+  pool: [],              // Songtitel-Pool des Artists (fuer Autocomplete + Zufallsauswahl)
+  targetTrack: null,    // { id, title, link }
+  targetVideoId: null,  // gefundenes YouTube-Video fuer diese Runde
+  attemptIndex: 0,
   wrongGuesses: [],
   finished: false,
+  loadingRound: false,
   snippetTimer: null,
 };
-
-// Caches, damit man beim "Naechster Song" nicht alles neu laedt
-const cache = {
-  easyPool: [],
-  mediumPool: [],
-  hardPool: [],
-};
-
-// ============================================================
-// DOM SHORTCUTS
-// ============================================================
 
 const el = (id) => document.getElementById(id);
 
 const steps = {
   search: el("step-search"),
-  difficulty: el("step-difficulty"),
   game: el("step-game"),
 };
 
@@ -38,7 +29,7 @@ function showStep(name) {
 }
 
 // ============================================================
-// STEP 1: ARTIST-SUCHE
+// STEP 1: ARTIST-SUCHE (Live-Dropdown)
 // ============================================================
 
 const artistInput = el("artistInput");
@@ -47,7 +38,7 @@ const ARTIST_SEARCH_MIN_CHARS = 2;
 const ARTIST_SEARCH_DEBOUNCE_MS = 350;
 
 let artistSearchDebounceTimer = null;
-let artistSearchRequestId = 0; // verhindert dass ein alter, langsamer Request neuere Ergebnisse ueberschreibt
+let artistSearchRequestId = 0;
 
 artistInput.addEventListener("input", () => {
   const query = artistInput.value.trim();
@@ -62,7 +53,6 @@ artistInput.addEventListener("input", () => {
   artistSearchDebounceTimer = setTimeout(() => runArtistSearch(query), ARTIST_SEARCH_DEBOUNCE_MS);
 });
 
-// Enter im Feld -> sofort suchen, ohne auf das Debounce zu warten
 el("searchForm").addEventListener("submit", (e) => {
   e.preventDefault();
   clearTimeout(artistSearchDebounceTimer);
@@ -77,7 +67,7 @@ async function runArtistSearch(query) {
 
   try {
     const artists = await searchArtists(query);
-    if (requestId !== artistSearchRequestId) return; // Antwort ist veraltet, verwerfen
+    if (requestId !== artistSearchRequestId) return;
     renderArtistDropdown(artists);
   } catch (err) {
     if (requestId !== artistSearchRequestId) return;
@@ -140,29 +130,9 @@ function formatFans(n) {
   return String(n);
 }
 
-function selectArtist(artist) {
-  state.artist = artist;
-  cache.easyPool = [];
-  cache.mediumPool = [];
-  cache.hardPool = [];
-
-  const cardHtml = `
-    <img src="${artist.picture_medium}" alt="${artist.name}" />
-    <div>
-      <div class="name">${artist.name}</div>
-      <div class="fans">${formatFans(artist.nb_fan)} Fans</div>
-    </div>
-  `;
-  el("chosenArtistCard").innerHTML = cardHtml;
-  el("gameArtistCard").innerHTML = cardHtml;
-
-  el("restartBtn").classList.remove("hidden");
-  resetDifficultyButtons();
-  showStep("difficulty");
-}
-
 el("restartBtn").addEventListener("click", () => {
   state.artist = null;
+  state.pool = [];
   artistInput.value = "";
   hideArtistDropdown();
   el("searchStatus").textContent = "";
@@ -171,177 +141,190 @@ el("restartBtn").addEventListener("click", () => {
 });
 
 // ============================================================
-// STEP 2: SCHWIERIGKEIT -> POOL BAUEN
+// ARTIST WÄHLEN -> POOL LADEN -> SPIEL STARTEN
 // ============================================================
 
-function resetDifficultyButtons() {
-  document.querySelectorAll(".diff-btn").forEach(btn => {
-    btn.disabled = false;
-    btn.querySelector("span").dataset.original = btn.querySelector("span").dataset.original
-      || btn.querySelector("span").textContent;
-    btn.querySelector("span").textContent = btn.querySelector("span").dataset.original;
-  });
-  el("diffStatus").textContent = "";
-}
+async function selectArtist(artist) {
+  state.artist = artist;
+  artistInput.value = artist.name;
 
-document.querySelectorAll(".diff-btn").forEach(btn => {
-  btn.addEventListener("click", () => startDifficulty(btn.dataset.diff, btn));
-});
+  const cardHtml = `
+    <img src="${artist.picture_medium}" alt="${artist.name}" />
+    <div>
+      <div class="name">${artist.name}</div>
+      <div class="fans">${formatFans(artist.nb_fan)} Fans</div>
+    </div>
+  `;
+  el("gameArtistCard").innerHTML = cardHtml;
+  el("restartBtn").classList.remove("hidden");
 
-async function startDifficulty(diff, btnEl) {
-  state.difficulty = diff;
-  document.querySelectorAll(".diff-btn").forEach(b => b.disabled = true);
-  const label = btnEl.querySelector("span");
-  const original = label.textContent;
-  label.textContent = "Lade Songs...";
-  el("diffStatus").textContent = "";
+  el("searchStatus").textContent = "Lade Songs...";
 
   try {
-    const pool = await getPoolForDifficulty(diff, state.artist.id);
-    if (pool.length < 4) {
-      throw new Error("Zu wenige Songs fuer diesen Modus gefunden.");
-    }
-    state.pool = pool;
-    startNewRound();
-    showStep("game");
-  } catch (err) {
-    console.error(err);
-    el("diffStatus").textContent = "Fehler: " + err.message + " (Proxy überlastet? Nochmal probieren.)";
-    document.querySelectorAll(".diff-btn").forEach(b => b.disabled = false);
-  } finally {
-    label.textContent = original;
-  }
-}
-
-async function getPoolForDifficulty(diff, artistId) {
-  if (diff === "easy") {
-    if (!cache.easyPool.length) {
-      const top = await getArtistTopTracks(artistId, CONFIG.POOL_SIZE_EASY);
-      cache.easyPool = normalizeTracks(top);
-    }
-    return cache.easyPool;
-  }
-
-  if (diff === "medium") {
-    if (!cache.mediumPool.length) {
-      const top = await getArtistTopTracks(artistId, CONFIG.POOL_SIZE_MEDIUM_END);
-      cache.mediumPool = normalizeTracks(top.slice(CONFIG.POOL_SIZE_EASY));
-    }
-    return cache.mediumPool;
-  }
-
-  // hard
-  if (!cache.hardPool.length) {
-    const top = await getArtistTopTracks(artistId, CONFIG.POOL_SIZE_MEDIUM_END);
-    const excludeIds = new Set(top.map(t => t.id));
-    const deepCuts = await buildDeepCutPool(artistId, excludeIds);
-    cache.hardPool = normalizeTracks(deepCuts);
-  }
-  return cache.hardPool;
-}
-
-function normalizeTracks(tracks) {
-  return tracks
-    .filter(t => t && t.preview) // Tracks ohne Preview koennen wir nicht spielen
-    .map(t => ({
+    const top = await getArtistTopTracks(artist.id, CONFIG.POOL_SIZE);
+    state.pool = top.map(t => ({
       id: t.id,
       title: t.title_short || t.title,
-      preview: t.preview,
       link: t.link,
     }));
+
+    if (state.pool.length < 4) {
+      throw new Error("Zu wenige Songs für diesen Artist gefunden.");
+    }
+
+    el("searchStatus").textContent = "";
+    showStep("game");
+    startNewRound();
+  } catch (err) {
+    console.error(err);
+    el("searchStatus").textContent = "Fehler: " + err.message;
+  }
 }
 
 // ============================================================
-// STEP 3: GAME ROUND
+// RUNDE STARTEN (inkl. YouTube-Songsuche)
 // ============================================================
 
-function startNewRound() {
-  state.targetTrack = state.pool[Math.floor(Math.random() * state.pool.length)];
+async function startNewRound() {
+  state.finished = false;
   state.attemptIndex = 0;
   state.wrongGuesses = [];
-  state.finished = false;
-
-  el("audioPlayer").src = state.targetTrack.preview;
-  el("audioPlayer").load();
+  state.targetTrack = null;
+  state.targetVideoId = null;
+  state.loadingRound = true;
 
   el("guessHistory").innerHTML = "";
-  el("guessInput").value = "";
-  el("guessInput").disabled = false;
-  el("suggestions").classList.add("hidden");
+  guessInput.value = "";
+  suggestionsBox.classList.add("hidden");
   el("resultBanner").classList.add("hidden");
   el("nextRoundBtn").classList.add("hidden");
-  document.querySelector('#guessForm button[type="submit"]').disabled = false;
-  el("skipBtn").disabled = false;
+  el("gameStatus").textContent = "Suche Song auf YouTube...";
 
-  renderAttempts();
+  setRoundControlsEnabled(false);
+  renderTimeline();
+  renderAttemptCounter();
   renderSnippetInfo();
-  resetProgressBar();
+
+  const maxTries = 5;
+  let lastErr = null;
+
+  for (let i = 0; i < maxTries; i++) {
+    const candidateTrack = state.pool[Math.floor(Math.random() * state.pool.length)];
+    try {
+      const videoId = await loadPlayableYoutubeTrack(state.artist.name, candidateTrack.title);
+      state.targetTrack = candidateTrack;
+      state.targetVideoId = videoId;
+      state.loadingRound = false;
+      el("gameStatus").textContent = "";
+      setRoundControlsEnabled(true);
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  state.loadingRound = false;
+  el("gameStatus").textContent = "Konnte keinen abspielbaren Song finden. "
+    + "Nochmal probieren: " + (lastErr ? lastErr.message : "");
+  el("nextRoundBtn").textContent = "Nochmal versuchen";
+  el("nextRoundBtn").classList.remove("hidden");
 }
 
-function renderAttempts() {
-  const container = el("attemptsDisplay");
-  container.innerHTML = "";
-  CONFIG.SNIPPET_LENGTHS.forEach((_, i) => {
-    const dot = document.createElement("div");
-    dot.className = "attempt-dot";
-    if (i < state.attemptIndex) dot.classList.add("used");
-    else if (i === state.attemptIndex) dot.classList.add("current");
-    container.appendChild(dot);
+function setRoundControlsEnabled(enabled) {
+  playBtn.disabled = !enabled;
+  guessInput.disabled = !enabled;
+  document.querySelector('#guessForm button[type="submit"]').disabled = !enabled;
+  el("skipBtn").disabled = !enabled;
+}
+
+// ============================================================
+// TIMELINE (segmentierte Zeitleiste statt Ein-Ausschnitt-Balken)
+// ============================================================
+
+const timelineFill = el("timelineFill");
+const timelinePlayhead = el("timelinePlayhead");
+const timelineTicks = el("timelineTicks");
+
+function timelinePercent(seconds) {
+  return Math.sqrt(seconds / MAX_SNIPPET) * 100;
+}
+
+function renderTimeline() {
+  timelineTicks.innerHTML = "";
+  CONFIG.SNIPPET_LENGTHS.forEach((seconds, i) => {
+    const tick = document.createElement("div");
+    tick.className = "tick";
+    tick.style.left = `${timelinePercent(seconds)}%`;
+    tick.dataset.index = i;
+    tick.innerHTML = `
+      <div class="tick-mark"></div>
+      <div class="tick-label">${seconds}s</div>
+    `;
+    timelineTicks.appendChild(tick);
   });
+  updateTimelineState();
+  resetPlayhead();
+}
+
+function updateTimelineState() {
+  const boundaryPercent = timelinePercent(CONFIG.SNIPPET_LENGTHS[state.attemptIndex]);
+  timelineFill.style.width = `${boundaryPercent}%`;
+
+  timelineTicks.querySelectorAll(".tick").forEach(tick => {
+    const i = Number(tick.dataset.index);
+    tick.classList.remove("past", "current", "future");
+    if (i < state.attemptIndex) tick.classList.add("past");
+    else if (i === state.attemptIndex) tick.classList.add("current");
+    else tick.classList.add("future");
+  });
+}
+
+function resetPlayhead() {
+  timelinePlayhead.style.transition = "none";
+  timelinePlayhead.style.left = "0%";
+}
+
+function animatePlayhead(seconds) {
+  const boundaryPercent = timelinePercent(seconds);
+  timelinePlayhead.style.transition = "none";
+  timelinePlayhead.style.left = "0%";
+  void timelinePlayhead.offsetWidth; // reflow, damit die Transition sauber neu startet
+  timelinePlayhead.style.transition = `left ${seconds}s linear`;
+  timelinePlayhead.style.left = `${boundaryPercent}%`;
+}
+
+function renderAttemptCounter() {
+  el("attemptCounter").textContent = `Versuch ${state.attemptIndex + 1}/${CONFIG.SNIPPET_LENGTHS.length}`;
 }
 
 function renderSnippetInfo() {
-  const length = CONFIG.SNIPPET_LENGTHS[state.attemptIndex];
-  el("currentSnippetLength").textContent = `${length}s`;
-
-  const dotsContainer = el("snippetDots");
-  dotsContainer.innerHTML = "";
-  CONFIG.SNIPPET_LENGTHS.forEach((_, i) => {
-    const d = document.createElement("div");
-    d.className = "sdot" + (i <= state.attemptIndex ? " active" : "");
-    dotsContainer.appendChild(d);
-  });
+  el("currentSnippetLength").textContent = `${CONFIG.SNIPPET_LENGTHS[state.attemptIndex]}s`;
 }
 
-// ---- Audio Snippet Playback ----
+// ============================================================
+// AUDIO-WIEDERGABE (YouTube)
+// ============================================================
 
-const audio = el("audioPlayer");
 const playBtn = el("playBtn");
-const progressBar = el("progressBar");
 
 playBtn.addEventListener("click", playCurrentSnippet);
 
 function playCurrentSnippet() {
+  if (!state.targetVideoId || state.loadingRound) return;
   clearTimeout(state.snippetTimer);
+
   const length = CONFIG.SNIPPET_LENGTHS[state.attemptIndex];
-
-  audio.currentTime = 0;
-  audio.play().catch(err => console.warn("Autoplay verhindert:", err));
-
   playBtn.classList.add("playing");
-  animateProgress(length);
+  animatePlayhead(length);
 
-  state.snippetTimer = setTimeout(() => {
-    audio.pause();
+  state.snippetTimer = playYoutubeSnippet(length, () => {
     playBtn.classList.remove("playing");
-  }, length * 1000);
+  });
 }
 
-function animateProgress(length) {
-  progressBar.style.transition = "none";
-  progressBar.style.width = "0%";
-  // Force reflow damit die Transition sauber neu startet
-  void progressBar.offsetWidth;
-  progressBar.style.transition = `width ${length}s linear`;
-  progressBar.style.width = "100%";
-}
-
-function resetProgressBar() {
-  progressBar.style.transition = "none";
-  progressBar.style.width = "0%";
-}
-
-// ---- Autocomplete ----
+// ============================================================
+// AUTOCOMPLETE
+// ============================================================
 
 const guessInput = el("guessInput");
 const suggestionsBox = el("suggestions");
@@ -380,16 +363,18 @@ guessInput.addEventListener("input", () => {
 });
 
 document.addEventListener("click", (e) => {
-  if (!e.target.closest(".autocomplete-wrap")) {
+  if (!e.target.closest("#guessForm .autocomplete-wrap")) {
     suggestionsBox.classList.add("hidden");
   }
 });
 
-// ---- Guessing ----
+// ============================================================
+// GUESSING
+// ============================================================
 
 el("guessForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  if (state.finished) return;
+  if (state.finished || state.loadingRound) return;
 
   const guess = guessInput.value.trim();
   if (!guess) return;
@@ -404,8 +389,8 @@ el("guessForm").addEventListener("submit", (e) => {
 });
 
 el("skipBtn").addEventListener("click", () => {
-  if (state.finished) return;
-  registerWrongGuess(null); // null = "geskippt"
+  if (state.finished || state.loadingRound) return;
+  registerWrongGuess(null);
 });
 
 function normalizeStr(s) {
@@ -427,34 +412,37 @@ function registerWrongGuess(guessText) {
     return;
   }
 
-  renderAttempts();
+  renderAttemptCounter();
   renderSnippetInfo();
-  resetProgressBar();
+  updateTimelineState();
+  resetPlayhead();
 }
 
 function endRound(won) {
   state.finished = true;
   clearTimeout(state.snippetTimer);
-  audio.pause();
+  if (ytPlayer) ytPlayer.pauseVideo();
   playBtn.classList.remove("playing");
 
-  guessInput.disabled = true;
-  document.querySelector('#guessForm button[type="submit"]').disabled = true;
-  el("skipBtn").disabled = true;
+  setRoundControlsEnabled(false);
 
   const banner = el("resultBanner");
   banner.classList.remove("hidden", "win", "lose");
   banner.classList.add(won ? "win" : "lose");
 
+  const ytLink = `https://www.youtube.com/watch?v=${state.targetVideoId}`;
+  const attemptsUsed = state.attemptIndex + 1;
+
   if (won) {
-    banner.innerHTML = `🎉 Richtig! Es war <strong>${state.targetTrack.title}</strong> ` +
-      `(Versuch ${state.attemptIndex + 1}/${CONFIG.SNIPPET_LENGTHS.length}). ` +
-      `<a href="${state.targetTrack.link}" target="_blank" rel="noopener">Auf Deezer anhören ↗</a>`;
+    banner.innerHTML = `🎉 Richtig! Es war <strong>${state.targetTrack.title}</strong> `
+      + `(Versuch ${attemptsUsed}/${CONFIG.SNIPPET_LENGTHS.length}). `
+      + `<a href="${ytLink}" target="_blank" rel="noopener">Auf YouTube ansehen ↗</a>`;
   } else {
-    banner.innerHTML = `😬 Leider nicht erraten. Der Song war <strong>${state.targetTrack.title}</strong>. ` +
-      `<a href="${state.targetTrack.link}" target="_blank" rel="noopener">Auf Deezer anhören ↗</a>`;
+    banner.innerHTML = `😬 Leider nicht erraten. Der Song war <strong>${state.targetTrack.title}</strong>. `
+      + `<a href="${ytLink}" target="_blank" rel="noopener">Auf YouTube ansehen ↗</a>`;
   }
 
+  el("nextRoundBtn").textContent = "Nächster Song";
   el("nextRoundBtn").classList.remove("hidden");
 }
 
