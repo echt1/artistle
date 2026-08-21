@@ -6,7 +6,7 @@ const CONFIG = {
   // ---- YouTube Data API (fuer die Songsuche + echten Vollton) ----
   // Hier deinen eigenen kostenlosen API-Key eintragen (siehe README.md,
   // Abschnitt "YouTube API-Key holen"). Ohne Key funktioniert nichts.
-  YOUTUBE_API_KEY: "DEIN_YOUTUBE_API_KEY_HIER",
+  YOUTUBE_API_KEY: "AIzaSyAZwqAyrivzY8cyn2cU8TZBhV9AxkCn_Kc",
 
   // Wie viele YouTube-Treffer pro Song probiert werden, falls der erste
   // Treffer nicht einbettbar ist (Lizenz-Sperren o.ae.).
