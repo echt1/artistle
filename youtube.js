@@ -55,18 +55,38 @@ async function runYoutubeVideoSearch(query, channelId) {
     .map(item => ({ videoId: item.id.videoId, title: item.snippet.title }));
 }
 
+function normalizeForMatch(s) {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Prueft ob ein YouTube-Videotitel plausibel zum gesuchten Songtitel passt. */
+function titleLooksLikeMatch(candidateTitle, trackTitle) {
+  const normalizedTrack = normalizeForMatch(trackTitle);
+  if (!normalizedTrack) return true;
+  return normalizeForMatch(candidateTitle).includes(normalizedTrack);
+}
+
 /**
  * Sucht auf YouTube nach dem Track. Wenn ein Topic-Channel bekannt ist,
  * wird zuerst dort gesucht (reines Audio, startet garantiert ohne
  * Musikvideo-Intro-Stille) - erst wenn das nichts findet, kommt die
  * allgemeine Suche mit "official audio" als Fallback.
+ *
+ * WICHTIG: YouTube liefert bei der Suche den "relevantesten" Treffer -
+ * das ist nicht automatisch der richtige Song (v.a. bei kurzen/generischen
+ * Titeln kann ein komplett anderer Song des Artists antworten). Deshalb
+ * wird jeder Kandidat gegen den gesuchten Songtitel geprueft; Treffer die
+ * nicht passen werden verworfen statt versehentlich als "der Song"
+ * durchzugehen.
  */
 async function searchYoutubeCandidates(artistName, trackTitle, topicChannelId) {
   if (topicChannelId) {
     const topicResults = await runYoutubeVideoSearch(trackTitle, topicChannelId);
-    if (topicResults.length) return topicResults;
+    const matched = topicResults.filter(c => titleLooksLikeMatch(c.title, trackTitle));
+    if (matched.length) return matched;
   }
-  return runYoutubeVideoSearch(`${artistName} ${trackTitle} official audio`, null);
+  const generalResults = await runYoutubeVideoSearch(`${artistName} ${trackTitle} official audio`, null);
+  return generalResults.filter(c => titleLooksLikeMatch(c.title, trackTitle));
 }
 
 // ---- IFrame Player Setup ----
@@ -153,7 +173,7 @@ function tryLoadVideo(player, videoId) {
 async function loadPlayableYoutubeTrack(artistName, trackTitle, topicChannelId) {
   const candidates = await searchYoutubeCandidates(artistName, trackTitle, topicChannelId);
   if (!candidates.length) {
-    throw new Error(`Kein YouTube-Video fuer "${trackTitle}" gefunden.`);
+    throw new Error(`Kein zu "${trackTitle}" passendes YouTube-Video gefunden.`);
   }
 
   const player = await getYtPlayer();

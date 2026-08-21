@@ -6,7 +6,7 @@ const CONFIG = {
   // ---- YouTube Data API (fuer die Songsuche + echten Vollton) ----
   // Hier deinen eigenen kostenlosen API-Key eintragen (siehe README.md,
   // Abschnitt "YouTube API-Key holen"). Ohne Key funktioniert nichts.
-  YOUTUBE_API_KEY: "AIzaSyAZwqAyrivzY8cyn2cU8TZBhV9AxkCn_Kc",
+  YOUTUBE_API_KEY: "DEIN_YOUTUBE_API_KEY_HIER",
 
   // Wie viele YouTube-Treffer pro Song probiert werden, falls der erste
   // Treffer nicht einbettbar ist (Lizenz-Sperren o.ae.).
@@ -49,4 +49,7 @@ const CONFIG = {
 
   // Timeout fuer einzelne Netzwerk-Requests (Deezer JSONP, YouTube-Suche).
   REQUEST_TIMEOUT_MS: 8000,
+
+  // Anzahl Songs pro Challenge-Runde.
+  CHALLENGE_ROUNDS: 5,
 };

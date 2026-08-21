@@ -16,6 +16,7 @@ const state = {
   loadingRound: false,
   snippetTimer: null,
   challenge: null,       // { role: 'A'|'B', id, playerName } waehrend einer Challenge-Runde
+  playedTitles: new Set(), // Songs die in dieser Session fuer diesen Artist schon dran waren
 };
 
 const el = (id) => document.getElementById(id);
@@ -137,6 +138,7 @@ el("restartBtn").addEventListener("click", () => {
   state.artist = null;
   state.pool = [];
   state.challenge = null;
+  state.playedTitles = new Set();
   artistInput.value = "";
   hideArtistDropdown();
   el("searchStatus").textContent = "";
@@ -180,6 +182,7 @@ async function selectArtist(artist) {
       throw new Error("Zu wenige Songs für diesen Artist gefunden.");
     }
 
+    state.playedTitles = new Set();
     el("searchStatus").textContent = "";
     el("startChallengeBtn").classList.remove("hidden");
     showStep("game");
@@ -208,8 +211,10 @@ async function startNewRound(preserveChallenge = false) {
   suggestionsBox.classList.add("hidden");
   el("resultBanner").classList.add("hidden");
   el("nextRoundBtn").classList.add("hidden");
-  el("challengePanel").classList.add("hidden");
-  el("challengePanel").innerHTML = "";
+  if (!preserveChallenge) {
+    el("challengePanel").classList.add("hidden");
+    el("challengePanel").innerHTML = "";
+  }
   el("gameStatus").textContent = "Suche Song auf YouTube...";
   resetPostGuessControls();
 
@@ -218,15 +223,33 @@ async function startNewRound(preserveChallenge = false) {
   renderAttemptCounter();
   renderSnippetInfo();
 
+  // Songs die in dieser Session (fuer diesen Artist) schon dran waren, plus
+  // schon in dieser Challenge verwendete Songs, nicht nochmal auswaehlen.
+  const challengeUsedTitles = new Set(state.challenge ? state.challenge.rounds.map(r => r.title) : []);
+  let candidatePool = state.pool.filter(
+    t => !state.playedTitles.has(t.title) && !challengeUsedTitles.has(t.title)
+  );
+
+  if (!candidatePool.length) {
+    // Ganzer Pool (abzueglich Challenge-Songs) schon durch - Historie
+    // zuruecksetzen ("nach hinten rutschen" faengt von vorne an), damit
+    // wieder alle Songs (bis auf die aktuellen Challenge-Songs) infrage kommen.
+    state.playedTitles = new Set();
+    candidatePool = state.pool.filter(t => !challengeUsedTitles.has(t.title));
+    if (!candidatePool.length) candidatePool = state.pool; // absoluter Notfall-Fallback
+  }
+
+  const searchPool = candidatePool;
   const maxTries = 5;
   let lastErr = null;
 
   for (let i = 0; i < maxTries; i++) {
-    const candidateTrack = state.pool[Math.floor(Math.random() * state.pool.length)];
+    const candidateTrack = searchPool[Math.floor(Math.random() * searchPool.length)];
     try {
       const videoId = await loadPlayableYoutubeTrack(state.artist.name, candidateTrack.title, state.topicChannelId);
       state.targetTrack = candidateTrack;
       state.targetVideoId = videoId;
+      state.playedTitles.add(candidateTrack.title);
       state.loadingRound = false;
       el("gameStatus").textContent = "";
       setRoundControlsEnabled(true);
@@ -464,7 +487,6 @@ function registerWrongGuess(guessText) {
 
   guessInput.value = "";
   state.attemptIndex++;
-  unlockPostGuessControls();
 
   if (state.attemptIndex >= CONFIG.SNIPPET_LENGTHS.length) {
     endRound(false);
@@ -505,15 +527,43 @@ function endRound(won) {
       + `<a href="${ytLink}" target="_blank" rel="noopener">Auf YouTube ansehen ↗</a>`;
   }
 
-  el("nextRoundBtn").textContent = "Nächster Song";
-  el("nextRoundBtn").classList.remove("hidden");
+  el("resultBanner").classList.remove("hidden");
 
+  // ---- Challenge-Fortschritt eintragen (falls aktiv) ----
   if (state.challenge) {
-    handleChallengeRoundEnd(won);
+    state.challenge.results.push({ won, attemptsUsed });
+    if (state.challenge.role === "A") {
+      state.challenge.rounds.push({ title: state.targetTrack.title, videoId: state.targetVideoId });
+    }
+  }
+
+  const roundsTotal = CONFIG.CHALLENGE_ROUNDS;
+  const roundsDone = state.challenge ? state.challenge.results.length : 0;
+
+  if (state.challenge && roundsDone < roundsTotal) {
+    el("nextRoundBtn").textContent = `Nächste Runde (${roundsDone + 1}/${roundsTotal})`;
+    el("nextRoundBtn").classList.remove("hidden");
+    renderChallengeProgress();
+  } else if (state.challenge) {
+    el("nextRoundBtn").classList.add("hidden");
+    finalizeChallenge();
+  } else {
+    el("nextRoundBtn").textContent = "Nächster Song";
+    el("nextRoundBtn").classList.remove("hidden");
   }
 }
 
-el("nextRoundBtn").addEventListener("click", () => startNewRound());
+el("nextRoundBtn").addEventListener("click", () => {
+  if (state.challenge && state.challenge.results.length < CONFIG.CHALLENGE_ROUNDS) {
+    if (state.challenge.role === "A") {
+      startNewRound(true);
+    } else {
+      startChallengeRoundAsB(state.challenge.results.length);
+    }
+  } else {
+    startNewRound();
+  }
+});
 
 // ============================================================
 // SPOTIFY INTEGRATION
@@ -593,15 +643,47 @@ el("startChallengeBtn").addEventListener("click", () => {
   const name = (window.prompt("Dein Name (wird deiner Gegner-Person angezeigt):", "") || "").trim();
   if (!name) return;
 
-  state.challenge = { role: "A", playerName: name };
+  state.challenge = { role: "A", playerName: name, rounds: [], results: [] };
   startNewRound(true);
 });
 
-/** Wird von endRound() aufgerufen, wenn state.challenge gesetzt ist. */
-async function handleChallengeRoundEnd(won) {
+function computeChallengeScore(results) {
+  const total = CONFIG.SNIPPET_LENGTHS.length;
+  const correctCount = results.filter(r => r.won).length;
+  // Nicht erratene Runden zaehlen als "Strafe" von total+1 Versuchen, damit
+  // sie beim Vergleich schlechter abschneiden als jede erratene Runde.
+  const totalAttempts = results.reduce((sum, r) => sum + (r.won ? r.attemptsUsed : total + 1), 0);
+  return { correctCount, totalAttempts };
+}
+
+/** "2s"-Chip bei richtig erratenem Song (zeigt bei welcher Snippet-Länge), sonst "❌"-Chip. */
+function roundResultLabel(r) {
+  if (!r.won) return `<span class="round-chip lose">❌</span>`;
+  const seconds = CONFIG.SNIPPET_LENGTHS[r.attemptsUsed - 1];
+  return `<span class="round-chip win">${seconds}s</span>`;
+}
+
+/** Zwischenstand nach einer Runde, solange die Challenge noch laeuft. */
+function renderChallengeProgress() {
   const panel = el("challengePanel");
   panel.classList.remove("hidden");
-  const result = { won, attemptsUsed: state.attemptIndex + 1 };
+  const total = CONFIG.CHALLENGE_ROUNDS;
+  const done = state.challenge.results.length;
+  const correct = state.challenge.results.filter(r => r.won).length;
+  const dots = state.challenge.results.map(roundResultLabel).join("  ");
+
+  panel.innerHTML = `
+    <h3>Challenge-Fortschritt</h3>
+    <p class="status">Runde ${done}/${total} gespielt — ${correct} von ${done} richtig erraten.</p>
+    <p class="round-dots">${dots}</p>
+  `;
+}
+
+/** Wird von endRound() aufgerufen, sobald alle Challenge-Runden gespielt sind. */
+async function finalizeChallenge() {
+  const panel = el("challengePanel");
+  panel.classList.remove("hidden");
+  const score = computeChallengeScore(state.challenge.results);
 
   if (state.challenge.role === "A") {
     panel.innerHTML = `<p class="status">Challenge wird erstellt...</p>`;
@@ -609,11 +691,11 @@ async function handleChallengeRoundEnd(won) {
       const id = await createChallenge({
         artistName: state.artist.name,
         artistPicture: state.artist.picture_medium,
-        trackTitle: state.targetTrack.title,
-        videoId: state.targetVideoId,
+        rounds: state.challenge.rounds,
         pool: state.pool.map(t => t.title),
         playerName: state.challenge.playerName,
-        result,
+        results: state.challenge.results,
+        score,
       });
       state.challenge.id = id;
       const shareUrl = `${window.location.origin}${window.location.pathname}?challenge=${id}`;
@@ -631,9 +713,12 @@ async function handleChallengeRoundEnd(won) {
   // role === "B"
   panel.innerHTML = `<p class="status">Ergebnis wird übermittelt...</p>`;
   try {
-    await submitChallengeResultAsB(state.challenge.id, state.challenge.playerName, result);
+    await submitChallengeResultAsB(state.challenge.id, state.challenge.playerName, state.challenge.results, score);
     const data = await getChallenge(state.challenge.id);
-    renderChallengeComparison({ ...data, playerB: { name: state.challenge.playerName, ...result } });
+    renderChallengeComparison({
+      ...data,
+      playerB: { name: state.challenge.playerName, results: state.challenge.results, ...score },
+    });
   } catch (err) {
     console.error(err);
     panel.innerHTML = `<p class="status">Ergebnis konnte nicht übermittelt werden: ${err.message}</p>`;
@@ -657,17 +742,25 @@ function renderChallengeWaiting(shareUrl) {
       el("copyChallengeLinkBtn").textContent = "Kopiert!";
     });
   });
+
+  el("nextRoundBtn").textContent = "Neuen Song spielen";
+  el("nextRoundBtn").classList.remove("hidden");
 }
 
 function renderChallengeComparison(data) {
   const panel = el("challengePanel");
   const a = data.playerA;
   const b = data.playerB;
-  const total = CONFIG.SNIPPET_LENGTHS.length;
-  const aScoreText = a.won ? `${a.attemptsUsed}/${total}` : "Nicht erraten";
-  const bScoreText = b.won ? `${b.attemptsUsed}/${total}` : "Nicht erraten";
-  const aWins = a.won && (!b.won || a.attemptsUsed <= b.attemptsUsed);
-  const bWins = b.won && (!a.won || b.attemptsUsed < a.attemptsUsed);
+  const total = CONFIG.CHALLENGE_ROUNDS;
+
+  const aScoreText = `${a.correctCount}/${total} richtig`;
+  const bScoreText = `${b.correctCount}/${total} richtig`;
+  const aWins = a.correctCount > b.correctCount
+    || (a.correctCount === b.correctCount && a.totalAttempts < b.totalAttempts);
+  const bWins = b.correctCount > a.correctCount
+    || (b.correctCount === a.correctCount && b.totalAttempts < a.totalAttempts);
+
+  const roundDots = (results) => results.map(roundResultLabel).join("  ");
 
   panel.innerHTML = `
     <h3>Challenge-Ergebnis</h3>
@@ -675,14 +768,19 @@ function renderChallengeComparison(data) {
       <div class="challenge-result-card ${aWins ? "winner" : ""}">
         <div class="name">${a.name}</div>
         <div class="score">${aScoreText}</div>
+        <div class="round-dots">${roundDots(a.results)}</div>
       </div>
       <div class="challenge-vs">vs</div>
       <div class="challenge-result-card ${bWins ? "winner" : ""}">
         <div class="name">${b.name}</div>
         <div class="score">${bScoreText}</div>
+        <div class="round-dots">${roundDots(b.results)}</div>
       </div>
     </div>
   `;
+
+  el("nextRoundBtn").textContent = "Nochmal spielen";
+  el("nextRoundBtn").classList.remove("hidden");
 }
 
 /** Beim Laden prüfen, ob die URL ?challenge=<id> enthält (jemand hat uns geschickt). */
@@ -702,8 +800,8 @@ async function handleIncomingChallengeIfNeeded() {
 
   try {
     const data = await getChallenge(challengeId);
-    const total = CONFIG.SNIPPET_LENGTHS.length;
-    const aScoreText = data.playerA.won ? `in ${data.playerA.attemptsUsed}/${total} Versuchen erraten` : "nicht erraten";
+    const total = CONFIG.CHALLENGE_ROUNDS;
+    const aScoreText = `${data.playerA.correctCount}/${total} Songs richtig erraten`;
 
     container.innerHTML = `
       <div class="chosen-artist">
@@ -711,7 +809,7 @@ async function handleIncomingChallengeIfNeeded() {
         <div><div class="name">${data.artistName}</div></div>
       </div>
       <h2>${data.playerA.name} fordert dich heraus!</h2>
-      <p class="sub">${data.playerA.name} hat den Song ${aScoreText}. Kannst du es besser?</p>
+      <p class="sub">${data.playerA.name} hat ${aScoreText}. ${total} Songs, gleicher Artist. Kannst du es besser?</p>
       <input type="text" id="challengeNameInput" placeholder="Dein Name" />
       <button id="acceptChallengeBtn" class="primary-btn">Challenge annehmen</button>
     `;
@@ -728,7 +826,14 @@ function acceptChallenge(challengeId, data) {
   state.artist = { name: data.artistName, picture_medium: data.artistPicture };
   state.pool = data.pool.map(title => ({ title }));
   state.topicChannelId = null;
-  state.challenge = { role: "B", id: challengeId, playerName: name };
+  state.challenge = {
+    role: "B",
+    id: challengeId,
+    playerName: name,
+    knownRounds: data.rounds, // von Spieler A vorgegebene Songs, in fester Reihenfolge
+    rounds: [],
+    results: [],
+  };
 
   el("gameArtistCard").innerHTML = `
     <img src="${data.artistPicture}" alt="${data.artistName}" />
@@ -738,16 +843,18 @@ function acceptChallenge(challengeId, data) {
   el("startChallengeBtn").classList.add("hidden");
 
   showStep("game");
-  startChallengeRoundAsB(data);
+  startChallengeRoundAsB(0);
 }
 
 /** Wie startNewRound(), aber mit dem schon bekannten (und geprüften) Song statt Zufallsauswahl. */
-async function startChallengeRoundAsB(data) {
+async function startChallengeRoundAsB(roundIndex) {
+  const roundData = state.challenge.knownRounds[roundIndex];
+
   state.finished = false;
   state.attemptIndex = 0;
   state.wrongGuesses = [];
-  state.targetTrack = { title: data.trackTitle };
-  state.targetVideoId = data.videoId;
+  state.targetTrack = { title: roundData.title };
+  state.targetVideoId = roundData.videoId;
   state.loadingRound = true;
 
   el("guessHistory").innerHTML = "";
@@ -755,7 +862,6 @@ async function startChallengeRoundAsB(data) {
   suggestionsBox.classList.add("hidden");
   el("resultBanner").classList.add("hidden");
   el("nextRoundBtn").classList.add("hidden");
-  el("challengePanel").classList.add("hidden");
   el("gameStatus").textContent = "Lade Song...";
   resetPostGuessControls();
   setRoundControlsEnabled(false);
@@ -765,7 +871,7 @@ async function startChallengeRoundAsB(data) {
 
   try {
     const player = await getYtPlayer();
-    const works = await tryLoadVideo(player, data.videoId);
+    const works = await tryLoadVideo(player, roundData.videoId);
     if (!works) throw new Error("Song ist nicht mehr abspielbar.");
     state.loadingRound = false;
     el("gameStatus").textContent = "";

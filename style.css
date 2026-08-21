@@ -198,6 +198,18 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 .challenge-result-card .name{ font-weight:600; margin-bottom:4px; }
 .challenge-result-card .score{ font-size:.9rem; color: var(--text-dim); }
 .challenge-result-card.winner .score{ color: var(--good); }
+.challenge-result-card .round-dots{ margin-top:8px; }
+.round-dots{ display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin: 10px 0 0; }
+.round-chip{
+  display:inline-block;
+  font-size:.78rem; font-weight:600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+.round-chip.win{ color: var(--good); border-color: var(--good); }
+.round-chip.lose{ color: var(--bad); border-color: var(--bad); }
 .challenge-vs{ color: var(--text-dim); font-size:.8rem; }
 
 .player-card{

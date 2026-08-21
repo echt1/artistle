@@ -43,11 +43,13 @@ Nebenwirkung des serverlosen Ansatzes.
 
 ## Challenge-Modus verbinden (optional)
 
-Herausfordern per Link: du spielst einen Song, der Link geht an eine andere
-Person, die spielt (wann sie will, unabhängig von dir) denselben Song —
-sobald beide fertig sind, zeigt die Seite den Vergleich. Läuft über
-**Firestore** (nur die Datenbank, kein Cloud Functions/Blaze-Zwang wie
-beim früheren CORS-Proxy-Thema).
+Herausfordern per Link: du spielst **5 Songs** desselben Artists nacheinander,
+der Link geht an eine andere Person, die spielt (wann sie will, unabhängig
+von dir) exakt dieselben 5 Songs in derselben Reihenfolge — sobald beide
+fertig sind, zeigt die Seite den Vergleich (Anzahl richtig erratener Songs,
+bei Gleichstand die Gesamt-Versuche). Läuft über **Firestore** (nur die
+Datenbank, kein Cloud Functions/Blaze-Zwang wie beim früheren
+CORS-Proxy-Thema).
 
 1. Gehe zu [console.firebase.google.com](https://console.firebase.google.com/), **Projekt erstellen** (kostenloser Spark-Tarif, kein Kreditkarte nötig).
 2. Im Projekt: **Build → Firestore Database → Datenbank erstellen**. Modus: **Produktionsmodus** (die Regeln unten machen es trotzdem nutzbar), Standort frei wählbar (z.B. `eur3`).

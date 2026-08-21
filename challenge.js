@@ -35,28 +35,37 @@ function generateChallengeId() {
     .join("");
 }
 
-/** Legt eine neue Challenge an. `result` = { won, attemptsUsed }. */
-async function createChallenge({ artistName, artistPicture, trackTitle, videoId, pool, playerName, result }) {
+/** Legt eine neue Challenge an. `results` = [{ won, attemptsUsed }, ...], `score` = { correctCount, totalAttempts }. */
+async function createChallenge({ artistName, artistPicture, rounds, pool, playerName, results, score }) {
   const db = getDb();
   const id = generateChallengeId();
   await db.collection("challenges").doc(id).set({
     artistName,
     artistPicture,
-    trackTitle,
-    videoId,
+    rounds, // [{ title, videoId }, ...] - fest vorgegebene Songreihenfolge fuer beide Spieler
     pool,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    playerA: { name: playerName, won: result.won, attemptsUsed: result.attemptsUsed },
+    playerA: {
+      name: playerName,
+      results,
+      correctCount: score.correctCount,
+      totalAttempts: score.totalAttempts,
+    },
     playerB: null,
   });
   return id;
 }
 
 /** Traegt das Ergebnis von Spieler B in eine bestehende Challenge ein. */
-async function submitChallengeResultAsB(challengeId, playerName, result) {
+async function submitChallengeResultAsB(challengeId, playerName, results, score) {
   const db = getDb();
   await db.collection("challenges").doc(challengeId).update({
-    playerB: { name: playerName, won: result.won, attemptsUsed: result.attemptsUsed },
+    playerB: {
+      name: playerName,
+      results,
+      correctCount: score.correctCount,
+      totalAttempts: score.totalAttempts,
+    },
   });
 }
 
