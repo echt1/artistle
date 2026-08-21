@@ -15,7 +15,10 @@
 
 <header class="topbar">
   <div class="logo">artist<span>le</span></div>
-  <button id="restartBtn" class="ghost-btn hidden">Neuer Künstler</button>
+  <div class="topbar-actions">
+    <button id="spotifyLoginBtn" class="ghost-btn">Mit Spotify verbinden</button>
+    <button id="restartBtn" class="ghost-btn hidden">Neuer Künstler</button>
+  </div>
 </header>
 
 <main id="app">
@@ -36,11 +39,19 @@
     <p id="searchStatus" class="status"></p>
   </section>
 
+  <!-- STEP: Eingehende Challenge (wenn ?challenge=... in der URL) -->
+  <section id="step-challenge-intro" class="step">
+    <div id="challengeIntro"></div>
+  </section>
+
   <!-- STEP 2: Game -->
   <section id="step-game" class="step">
     <div class="game-head">
       <div class="chosen-artist" id="gameArtistCard"></div>
-      <div class="attempt-counter" id="attemptCounter"></div>
+      <div class="game-head-right">
+        <button id="startChallengeBtn" class="ghost-btn hidden">🎯 Herausfordern</button>
+        <div class="attempt-counter" id="attemptCounter"></div>
+      </div>
     </div>
 
     <div class="player-card">
@@ -62,12 +73,14 @@
         </div>
       </div>
 
+      <button id="continueListenBtn" class="ghost-btn continue-btn hidden">▶ Ganzen Song weiterhören</button>
+
       <p id="gameStatus" class="status"></p>
     </div>
 
     <form id="guessForm" class="guess-row" autocomplete="off">
       <div class="autocomplete-wrap">
-        <input id="guessInput" type="text" placeholder="Songtitel eingeben (min. 4 Zeichen für Vorschläge)" disabled />
+        <input id="guessInput" type="text" placeholder="Songtitel eingeben..." disabled />
         <div id="suggestions" class="suggestions hidden"></div>
       </div>
       <button type="submit" disabled>Raten</button>
@@ -77,6 +90,13 @@
     <ul id="guessHistory" class="guess-history"></ul>
 
     <div id="resultBanner" class="result-banner hidden"></div>
+
+    <div class="post-round-actions">
+      <button id="spotifySaveBtn" class="ghost-btn hidden">🎵 Zu Spotify hinzufügen</button>
+      <span id="spotifyStatus" class="status inline"></span>
+    </div>
+
+    <div id="challengePanel" class="challenge-panel hidden"></div>
 
     <button id="nextRoundBtn" class="primary-btn hidden">Nächster Song</button>
   </section>
@@ -89,9 +109,14 @@
 <div id="ytPlayer" class="yt-player-hidden"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <script src="config.js"></script>
 <script src="deezer.js"></script>
 <script src="youtube.js"></script>
+<script src="spotify.js"></script>
+<script src="challenge.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -35,6 +35,7 @@ body{
   padding: 20px 28px;
   position:relative; z-index:1;
 }
+.topbar-actions{ display:flex; gap:10px; align-items:center; }
 .logo{
   font-family:'Space Grotesk', sans-serif;
   font-weight:700;
@@ -153,11 +154,51 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 
 /* Game */
 .game-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+.game-head-right{ display:flex; align-items:center; gap:10px; }
 .attempt-counter{
   font-size:.85rem; color: var(--text-dim);
   background: var(--bg-elevated); border:1px solid var(--border);
   padding: 6px 12px; border-radius: 999px;
 }
+
+/* Challenge */
+#step-challenge-intro input[type="text"]{ margin: 16px 0; }
+.challenge-panel{
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 18px;
+}
+.challenge-panel h3{
+  font-family:'Space Grotesk', sans-serif;
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+.challenge-link-row{ display:flex; gap:10px; margin: 10px 0; }
+.challenge-link-row input{
+  flex:1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: .85rem;
+}
+.challenge-results{ display:flex; align-items:center; gap:14px; margin-top:10px; }
+.challenge-result-card{
+  flex:1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  text-align:center;
+}
+.challenge-result-card.winner{ border-color: var(--good); }
+.challenge-result-card .name{ font-weight:600; margin-bottom:4px; }
+.challenge-result-card .score{ font-size:.9rem; color: var(--text-dim); }
+.challenge-result-card.winner .score{ color: var(--good); }
+.challenge-vs{ color: var(--text-dim); font-size:.8rem; }
 
 .player-card{
   background: var(--bg-elevated);
@@ -226,6 +267,15 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 .snippet-info-label{ font-size:.75rem; color: var(--text-dim); }
 #currentSnippetLength{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:1.1rem; }
 
+.continue-btn{ margin-top:18px; width:100%; }
+.continue-btn.listening{ border-color: var(--accent); color: var(--accent); }
+
+.post-round-actions{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin-bottom: 16px;
+}
+.status.inline{ margin-top:0; min-height:auto; }
+
 /* Versteckter YouTube-Player: liefert nur Ton, kein sichtbares Video
    (waere sonst ein Cheat, da Thumbnail/Kanalname den Song verraten). */
 .yt-player-hidden{
@@ -278,4 +328,7 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   h1{ font-size:1.6rem; }
   .search-row, .guess-row{ flex-direction:column; }
   .search-row button, .guess-row button{ width:100%; }
+  .topbar{ padding: 16px; }
+  .topbar-actions{ gap:6px; }
+  .topbar-actions .ghost-btn{ padding: 8px 10px; font-size:.78rem; }
 }

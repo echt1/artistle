@@ -6,12 +6,42 @@
 // Songanfang. YouTube "Official Audio"-Videos sind Volltracks, wir
 // steuern selbst per JS ab welcher Sekunde abgespielt wird.
 
-/** Sucht auf YouTube nach dem Track. Gibt bis zu N Video-Kandidaten zurueck. */
-async function searchYoutubeCandidates(artistName, trackTitle) {
-  const q = encodeURIComponent(`${artistName} ${trackTitle} official audio`);
+/**
+ * Sucht den offiziellen "<Artist> - Topic"-Channel (YouTubes automatisch
+ * generierter Channel mit reinen Audio-Uploads, ohne Musikvideo-Intro/
+ * Stille/Skits davor). Existiert er, spielen wir bevorzugt von dort.
+ * Gibt null zurueck wenn kein exakt passender Topic-Channel existiert.
+ */
+async function findTopicChannelId(artistName) {
+  const q = encodeURIComponent(`${artistName} - Topic`);
   const url = `https://www.googleapis.com/youtube/v3/search`
-    + `?part=snippet&type=video&videoEmbeddable=true&videoCategoryId=10`
-    + `&maxResults=${CONFIG.YOUTUBE_SEARCH_RESULT_COUNT}&q=${q}&key=${CONFIG.YOUTUBE_API_KEY}`;
+    + `?part=snippet&type=channel&maxResults=5&q=${q}&key=${CONFIG.YOUTUBE_API_KEY}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const target = `${artistName.toLowerCase()} - topic`;
+    const match = (data.items || []).find(
+      item => item.snippet.title.toLowerCase() === target
+    );
+    return match ? match.snippet.channelId : null;
+  } catch {
+    return null; // Topic-Channel-Suche ist ein Nice-to-have, nie hart failen
+  }
+}
+
+async function runYoutubeVideoSearch(query, channelId) {
+  let url = `https://www.googleapis.com/youtube/v3/search`
+    + `?part=snippet&type=video&videoEmbeddable=true`
+    + `&maxResults=${CONFIG.YOUTUBE_SEARCH_RESULT_COUNT}&q=${encodeURIComponent(query)}`
+    + `&key=${CONFIG.YOUTUBE_API_KEY}`;
+
+  if (channelId) {
+    url += `&channelId=${channelId}`;
+  } else {
+    url += `&videoCategoryId=10`; // Musik-Kategorie, hilft bei allgemeiner Suche
+  }
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -23,6 +53,20 @@ async function searchYoutubeCandidates(artistName, trackTitle) {
   return (data.items || [])
     .filter(item => item.id && item.id.videoId)
     .map(item => ({ videoId: item.id.videoId, title: item.snippet.title }));
+}
+
+/**
+ * Sucht auf YouTube nach dem Track. Wenn ein Topic-Channel bekannt ist,
+ * wird zuerst dort gesucht (reines Audio, startet garantiert ohne
+ * Musikvideo-Intro-Stille) - erst wenn das nichts findet, kommt die
+ * allgemeine Suche mit "official audio" als Fallback.
+ */
+async function searchYoutubeCandidates(artistName, trackTitle, topicChannelId) {
+  if (topicChannelId) {
+    const topicResults = await runYoutubeVideoSearch(trackTitle, topicChannelId);
+    if (topicResults.length) return topicResults;
+  }
+  return runYoutubeVideoSearch(`${artistName} ${trackTitle} official audio`, null);
 }
 
 // ---- IFrame Player Setup ----
@@ -106,8 +150,8 @@ function tryLoadVideo(player, videoId) {
  * Sucht den Track auf YouTube und laedt den ersten Kandidaten, der sich
  * tatsaechlich einbetten laesst. Wirft, wenn gar keiner klappt.
  */
-async function loadPlayableYoutubeTrack(artistName, trackTitle) {
-  const candidates = await searchYoutubeCandidates(artistName, trackTitle);
+async function loadPlayableYoutubeTrack(artistName, trackTitle, topicChannelId) {
+  const candidates = await searchYoutubeCandidates(artistName, trackTitle, topicChannelId);
   if (!candidates.length) {
     throw new Error(`Kein YouTube-Video fuer "${trackTitle}" gefunden.`);
   }
